@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>TTS Demo</title>
+  <style>
+    body { font-family: Arial; max-width: 900px; margin: 24px auto; }
+    textarea { width: 100%; height: 220px; padding: 10px; font-size: 14px; }
+    button { padding: 10px 14px; margin-right: 10px; cursor: pointer; }
+    .row { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .muted { color:#666; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h2>ElevenLabs TTS (Django + HTML)</h2>
+
+  <textarea id="text" placeholder="Yaha apna prompt / story paste karo..."></textarea>
+
+  <div class="row">
+    <button id="btnGen">Generate Audio</button>
+    <button id="btnPlay" disabled>Play</button>
+    <button id="btnPause" disabled>Pause</button>
+    <button id="btnStop" disabled>Stop</button>
+    <a id="btnDownload" href="#" download="speech.mp3" style="pointer-events:none; opacity:.5;">Download</a>
+  </div>
+
+  <p class="muted" id="status">Status: Ready</p>
+
+  <audio id="player" controls style="width:100%; margin-top: 16px;"></audio>
+
+  <script>
+    const btnGen = document.getElementById("btnGen");
+    const btnPlay = document.getElementById("btnPlay");
+    const btnPause = document.getElementById("btnPause");
+    const btnStop = document.getElementById("btnStop");
+    const btnDownload = document.getElementById("btnDownload");
+    const player = document.getElementById("player");
+    const statusEl = document.getElementById("status");
+    const textEl = document.getElementById("text");
+
+    let currentBlobUrl = null;
+
+    function setStatus(msg){ statusEl.textContent = "Status: " + msg; }
+    function enableControls(enabled){
+      btnPlay.disabled = !enabled;
+      btnPause.disabled = !enabled;
+      btnStop.disabled = !enabled;
+      btnDownload.style.pointerEvents = enabled ? "auto" : "none";
+      btnDownload.style.opacity = enabled ? "1" : ".5";
+    }
+
+    btnGen.addEventListener("click", async () => {
+      const text = textEl.value.trim();
+      if(!text){ alert("Text/prompt add karo"); return; }
+
+      setStatus("Generating...");
+      enableControls(false);
+      btnGen.disabled = true;
+
+      try{
+        const res = await fetch("/api/tts/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+
+        if(!res.ok){
+          const err = await res.json().catch(()=>({}));
+          throw new Error(err.detail || err.error || ("HTTP " + res.status));
+        }
+
+        const blob = await res.blob();
+        if(currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+        currentBlobUrl = URL.createObjectURL(blob);
+
+        player.src = currentBlobUrl;
+        btnDownload.href = currentBlobUrl;
+
+        setStatus("Audio ready ✅");
+        enableControls(true);
+      }catch(e){
+        console.error(e);
+        setStatus("Error: " + e.message);
+        alert("Error: " + e.message);
+      }finally{
+        btnGen.disabled = false;
+      }
+    });
+
+    btnPlay.addEventListener("click", () => player.play());
+    btnPause.addEventListener("click", () => player.pause());
+    btnStop.addEventListener("click", () => { player.pause(); player.currentTime = 0; });
+  </script>
+</body>
+</html>
